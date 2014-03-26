@@ -1,10 +1,10 @@
 
-Reza Salari [Brannigan Lab](http://branniganlab.org)
+Reza Salari ([Brannigan Lab](http://branniganlab.org))
 
 
 ## Introduction
 
-When setting up as simulation box (especially when lipids are involved), it is
+When setting up a simulation box (especially when lipids are involved), it is
 possible that some carbon chains end up passing through rings by mistake (e.g.
 tails of POPC goes through a benzene ring of PHE). This script tries to find
 such cases.
@@ -32,6 +32,10 @@ Use `-h` for all options. Typically you can run:
 And it will output the residues that it thinks might have bond-in-ring issue.
 
 
-# To run tests
+## To run tests
 
-	python -m unittest -v test_biring
+	python test_biring.py
+
+	# or if you have coverage installed:
+	python -m coverage run test_biring.py
+	python -m coverage report

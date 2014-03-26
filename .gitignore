@@ -1,4 +1,6 @@
 *.tga
 *_vmd
 *.pyc
-
+__pycache__
+.coverage
+htmlcov

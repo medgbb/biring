@@ -40,15 +40,49 @@ class TestBiringHelpers(unittest.TestCase):
 
 
 class TestBiringMolClasses(unittest.TestCase):
-    pass
+
+    def test_residue(self):
+        r = biring.Residue('SER', 1, 0)
+
+        self.assertEqual(len(r.atoms), r.natoms())
+        self.assertEqual(r.natoms(), 0)
+
+        r.add_atom('N', None, 1, (0.1, 3.4, 9.0))
+        self.assertEqual(r.natoms(), 1)
+        a = r.atoms[0]
+        self.assertEqual(a.name, 'N')
+        self.assertEqual(a.coord, (0.1, 3.4, 9.0))
+        self.assertEqual(a.residue, r)
+
+        r.add_atom('CA', None, 2, (1.1, 2.2, -3.0))
+        self.assertEqual(r.natoms(), 2)
+        com = [round(x, 2) for x in r.get_com()]
+        self.assertEqual(com, [0.6, 2.8, 3.0])
 
 
 class TestBiringPDBReader(unittest.TestCase):
 
     def test_pdb_reader(self):
         mol = biring.read_pdb('sample/pdb1.pdb')
+
         self.assertEqual(mol.natoms(), 52803)
         self.assertEqual(mol.nres(), 1919)
+
+        self.assertEqual(mol.residues[0].name, 'SER')
+        self.assertEqual(mol.residues[-1].name, 'POPC')
+
+        self.assertEqual(mol.residues[0].number, 1)
+        self.assertEqual(mol.residues[-1].number, 220)
+
+        self.assertEqual(mol.residues[0].atoms[0].name, 'N')
+        self.assertEqual(mol.residues[-1].atoms[-1].name, 'H16Z')
+
+        self.assertEqual(mol.residues[0].atoms[0].index, 0)
+        self.assertEqual(mol.residues[-1].atoms[-1].index, 52802)
+
+
+class TestBiringFindBondsInRingsAlg1(unittest.TestCase):
+    pass
 
 if __name__ == '__main__':
     unittest.main()
