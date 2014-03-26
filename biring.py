@@ -1,6 +1,7 @@
 """
 Author: Reza Salari
 License: GPL v3
+Version: 0.1
 
 ## Introduction
 
@@ -11,7 +12,7 @@ cases.
 
 ## Requirements
 
-- Python 2.7
+- Python 2.7+
 - Numpy
 
 ## Defining new rings
@@ -19,10 +20,15 @@ You can add more ring definitions to the `RING_DEFINITIONS` below.
 
 ## How to use it
 
+Use `-h` for full options. Typically you can run:
+
+    python biring.py pdbfname.pdb
+
+And it will output the residues that it think might have bond-in-ring issue.
+
 
 """
-
-from __future__ import print_function
+from __future__ import (unicode_literals, print_function)
 import os
 import re
 import argparse
@@ -59,6 +65,8 @@ def parse_ring_definitions(ringdefs):
 
     Returns a dictionary of the following format:
         parsed_rings: {"RESNAME":[ (RING1_ATOMS), (RING2_ATOMS),... ]}
+        nres: int, number of residues
+        nrings: int, number of rings
     """
 
     lines = ringdefs.split('\n')
@@ -74,21 +82,30 @@ def parse_ring_definitions(ringdefs):
         parsed_rings[fields[0]].append(tuple(fields[1:]))
         nrings += 1
 
-    print('(i) parsed %d rings belonging to %d residues.' %
-          (nrings, len(parsed_rings.keys())))
-    return parsed_rings
+    nres = len(list(parsed_rings.keys()))
+    return parsed_rings, nres, nrings
 
 
 def guess_intra_res_bonds(mol, target_resnames=[], bond_cutoff=3.0):
-    """
+    """ Find the atoms that are bonded.
 
+    This function uses an approximate method (geometric
+        distance) to define bonds.
+
+    Arguments:
+        mol : a Molecule() instance
+        target_resnames: list, ['POPC', 'DOPC', ...]
+        bond_cutoff: float, cutoff for defining a bond
+
+    Returns:
+        resname_bonds_map = {'POPC':[ ('C1','C2'), ('C2','C3'), ... ], ...}
     """
 
     resname_bonds_map = {}
 
     for res in mol.residues:
         if res.name in target_resnames:
-            if res.name not in resname_bonds_map.keys():
+            if res.name not in list(resname_bonds_map.keys()):
                 bonds = []
                 N = res.natoms()
                 for i in range(0, N - 1):
@@ -101,9 +118,6 @@ def guess_intra_res_bonds(mol, target_resnames=[], bond_cutoff=3.0):
                                           res.atoms[j].name))
                 resname_bonds_map[res.name] = bonds
 
-    print('(i) number of found bonds based on %4.2f A cutoff: ' % bond_cutoff)
-    for k in resname_bonds_map.keys():
-        print('\t %6s : %2d bonds' % (k, len(resname_bonds_map[k])))
     return resname_bonds_map
 
 
@@ -167,7 +181,7 @@ class Residue:
         return "%4s %4d" % (self.name, self.number)
 
 
-class Molecule(object):
+class Molecule:
 
     def __init__(self):
         self.residues = []
@@ -203,6 +217,19 @@ class Molecule(object):
 
 
 def read_pdb(fname, ignored_res=[], ignore_H=False):
+    """ Read a PDB file.
+
+    Arguments:
+        fname: string, name of pdb file
+        ignored_res: list, list of residue names to be ignored
+            like ['TIP3',...]
+        ignore_H: bool, whether to include the hydrogens in the molecule
+
+    Returns:
+        mol: a Molecule instance.
+
+    """
+
     tmp_resname = None
     tmp_resnumb = None
 
@@ -254,11 +281,25 @@ def read_pdb(fname, ignored_res=[], ignore_H=False):
 # =========================================================
 
 
-def find_bonds_in_rings(mol, ring_defs, intruding_res, resname_bonds_map):
+def find_bonds_in_rings_alg1(mol, ring_defs, intruding_res, resname_bonds_map):
+    """ Tries to find bonds inside rings using simple geometric distance.
+
+    Arguments:
+        mol: a Molecule() instance
+        ring_defs: dict, output from parse_ring_definitions()
+        intruding_res: list, list of residue names that are checked
+            like ['POPC',...]
+        resname_bonds_map: dict, output from guess_intra_res_bonds()
+
+    Returns:
+        result: dict, {'res1-res2':[dist1, dist2,...], ....}
+
+    """
+
     print('(i) finding bonds in rings...')
 
     # find the index of residues that have rings
-    ring_resnames = ring_defs.keys()
+    ring_resnames = list(ring_defs.keys())
     ring_ind = []
     for i, res in enumerate(mol.residues):
         if res.name in ring_resnames:
@@ -298,7 +339,7 @@ def find_bonds_in_rings(mol, ring_defs, intruding_res, resname_bonds_map):
                         result[key].append(dist)
 
     # show the result - ascending based on the distance
-    result_sum = {k: min(result[k]) for k in result.keys()}
+    result_sum = {k: min(result[k]) for k in list(result.keys())}
     result_keys = sorted(result_sum, key=result_sum.get)
     for k in result_keys:
         print('\t %s    -> %4.2f A' % (k, result_sum[k]))
@@ -312,43 +353,67 @@ def find_bonds_in_rings(mol, ring_defs, intruding_res, resname_bonds_map):
 
 
 def main():
+    # command line options
     p = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     p.add_argument('pdb', help='pdb file')
+
     p.add_argument('--cut', dest='bond_cutoff', default=1.6,
                    help='cutoff for defining bonds')
+
     p.add_argument('-H', dest='include_H', default=False, action='store_true',
                    help='include hydrogens for checking bonds')
+
     p.add_argument('-I', dest='ignored_res', nargs='?', const=[],
                    default=['TIP3', 'TIP3P', 'SOD', 'CLA'],
                    help='ignore these residues')
+
     p.add_argument('-A', dest='intruding_res', nargs='?', const=[],
                    default=['POPC', 'DOPC'],
                    help='residues that can pass through a ring')
 
-    args = p.parse_args()
     # args:
     # Namespace(bond_cutoff=2.8, include_H=False, pdb='step5_assembly.pdb')
+    args = p.parse_args()
 
+    # check for the file
     if not os.path.exists(args.pdb):
         print('(e) the file "%s" doesn\'t exist' % args.pdb)
         return
 
+    # inform about flags
     if args.include_H is False:
         print('(i) ignoring hydrogens.')
 
     if args.ignored_res:
         print('(i) ignoring these residues: %s.' % args.ignored_res)
 
+    # ---------------------------------
+    # read the molecule
     mol = read_pdb(args.pdb, args.ignored_res, not args.include_H)
     print(mol)
 
+    # ---------------------------------
+    # guess bonds
     resname_bonds_map = guess_intra_res_bonds(mol, args.intruding_res,
                                               args.bond_cutoff)
-    ring_defs = parse_ring_definitions(RING_DEFINITIONS)
+    print('(i) number of found bonds based on %4.2f A cutoff: ' %
+          args.bond_cutoff)
+    for k in list(resname_bonds_map.keys()):
+        print('\t %6s : %2d bonds' % (k, len(resname_bonds_map[k])))
 
-    find_bonds_in_rings(mol, ring_defs, args.intruding_res, resname_bonds_map)
+    # ---------------------------------
+    # parse ring definitons
+    ring_defs, nres, nrings = parse_ring_definitions(RING_DEFINITIONS)
+    print('(i) parsed %d rings belonging to %d residues.' % (nrings, nres))
 
+    # ---------------------------------
+    # find suspicious residues using algorithm 1
+    find_bonds_in_rings_alg1(mol,
+                             ring_defs, args.intruding_res, resname_bonds_map)
+
+    # ---------------------------------
     print('(i) done.')
 
 
