@@ -1,6 +1,6 @@
 """
 Author: Reza Salari
-Name: biring.py  (Bond In the Ring)
+Name: biring.py  (Bond In Ring)
 Version: 0.1
 License: GPL v3
 
@@ -12,8 +12,9 @@ tail of POPC goes through benzene ring of PHE). This script tries to find such
 cases.
 
 Currently, one simple algorithm is implemented - if the distance between the
-center of a bond from the center of the ring is less than the PROXIMITY_CUTOFF
-, it is reported.
+center of a bond from the center of a ring is less than the PROXIMITY_CUTOFF, it
+will be reported. The script also creates a vmd script that visualizes the
+reported residues.
 
 ## Requirements
 
@@ -183,7 +184,7 @@ class Residue:
         return np.array(crds).mean(axis=0)
 
     def __repr__(self):
-        return "%4s %4d" % (self.name, self.number)
+        return "%4s %4d [%4d]" % (self.name, self.number, self.index)
 
 
 class Molecule:
@@ -319,44 +320,49 @@ def find_bonds_in_rings_alg1(mol, ring_defs, intruding_res, resname_bonds_map,
 
     # result will be of format { 'CHL1 11 - POPC 34': [1.2, 1.4], ...}
     result = defaultdict(list)
-    for i, ires in ring_ind:
-        for ring_atoms in ring_defs[ires]:
-            ring_crds = \
-                mol.residues[i].get_atom_coords_basedon_names(*ring_atoms)
+
+    # result_res_objects will be of format [ (res1, res2), ...]
+    result_res_objects = []
+
+    for i, iresname in ring_ind:
+        ires = mol.residues[i]
+        for ring_atoms in ring_defs[iresname]:
+            ring_crds = ires.get_atom_coords_basedon_names(*ring_atoms)
             ring_crds_mean = np.array(ring_crds).mean(axis=0)
 
-            for j, jres in intrud_ind:
-
+            for j, jresname in intrud_ind:
+                jres = mol.residues[j]
                 # quick check to see if the ring and the intruder are near
                 # each other
-                jcom = mol.residues[j].get_com()
+                jcom = jres.get_com()
                 if coord_dist(ring_crds_mean, jcom) >= 20:
                     continue
 
                 # now check the distance between the center of each bond to
                 # the center of the ring
-                for b in resname_bonds_map[jres]:
-                    bond_crds = \
-                        mol.residues[j].get_atom_coords_basedon_names(*b)
+                for b in resname_bonds_map[jresname]:
+                    bond_crds = jres.get_atom_coords_basedon_names(*b)
                     bond_crds_mean = np.array(bond_crds).mean(axis=0)
                     dist = coord_dist(ring_crds_mean, bond_crds_mean)
                     if dist <= 2.3:
-                        key = '%s - %s' % (mol.residues[i], mol.residues[j])
+                        key = '%s - %s' % (ires, jres)
                         result[key].append(dist)
+                        if not (ires, jres) in result_res_objects:
+                            result_res_objects.append((ires, jres))
 
-    return result
+    return result, result_res_objects
 
 # =========================================================
 # Make VMD script
 # =========================================================
 
 
-def make_vmd_script(fname, result_sum):
+def make_vmd_script(fname, result_res_objects):
     """ Create a vmdscript for visualizing the result
 
     Arguments:
         fname: string, the name of PDB file
-        result_sum: dict: {'resname1 resid1 - resname2 resid2':dist, ...}
+        result_res_objects: list, [(res1, res2), ...]
 
     """
 
@@ -371,16 +377,15 @@ mol delrep 0 top
     rep_commands = []
 
     rep_number = 0
-    for k in list(result_sum.keys()):
-        res1 = k.split('-')[0].strip()
-        res2 = k.split('-')[1].strip()
-        resname1, resid1 = res1.split()
-        resname2, resid2 = res2.split()
+    for ires, jres in result_res_objects:
 
-        sel = '(resname %s and resid %s) or (resname %s and resid %s)' % (
-            resname1, resid1, resname2, resid2)
+        # sel = '(resname %s and resid %s) or (resname %s and resid %s)' % (
+        #     ires.name, ires.number, jres.name, jres.number)
+        sel = '(same residue as index %d) or (same residue as index %d)' % (
+            ires.atoms[0].index, jres.atoms[0].index)
         cm = 'mol addrep top\n'
         cm += 'mol modselect %d top "noh and (%s)"\n' % (rep_number, sel)
+        cm += 'mol showrep top %d 0\n' % (rep_number)
 
         rep_commands.append(cm)
         rep_number += 1
@@ -390,6 +395,8 @@ mol delrep 0 top
     outname = fname + '_vmd'
     with open(outname, 'w') as f:
         f.writelines(script)
+
+    return outname
 
 # =========================================================
 # Main
@@ -459,11 +466,12 @@ def main():
     # ---------------------------------
     # find suspicious residues using algorithm 1
     print('(i) finding bonds in rings...')
-    result = find_bonds_in_rings_alg1(mol,
-                                      ring_defs,
-                                      args.intruding_res,
-                                      resname_bonds_map,
-                                      args.proximity_cutoff)
+    result, result_res_objects = \
+        find_bonds_in_rings_alg1(mol,
+                                 ring_defs,
+                                 args.intruding_res,
+                                 resname_bonds_map,
+                                 args.proximity_cutoff)
 
     # show the result - ascending based on the distance
     print('(i) these residues potentially have bond-in-ring situation:\n')
@@ -471,9 +479,15 @@ def main():
     result_keys = sorted(result_sum, key=result_sum.get)
     for k in result_keys:
         print('\t %s    -> %4.2f A' % (k, result_sum[k]))
+    print(' ')
 
+    # ---------------------------------
     # make vmd script
-    make_vmd_script(args.pdb, result_sum)
+    outname = make_vmd_script(args.pdb, result_res_objects)
+    print('(i) the vmd script is created - to visulize the reported residues:')
+    print('\n         vmd -e %s\n' % outname)
+    print('    note that the representations are hidden by default.')
+    print('    go to Graphics->Representions to enable them.\n')
 
     # ---------------------------------
     print('(i) done.')
