@@ -1,7 +1,8 @@
 """
 Author: Reza Salari
-License: GPL v3
+Name: biring.py  (Bond In the Ring)
 Version: 0.1
+License: GPL v3
 
 ## Introduction
 
@@ -9,6 +10,10 @@ When setting up as simulation box (especially when lipids are involved), it is
 possible that some carbon chains end up passing through rings by mistake (e.g.
 tail of POPC goes through benzene ring of PHE). This script tries to find such
 cases.
+
+Currently, one simple algorithm is implemented - if the distance between the
+center of a bond from the center of the ring is less than the PROXIMITY_CUTOFF
+, it is reported.
 
 ## Requirements
 
@@ -281,7 +286,8 @@ def read_pdb(fname, ignored_res=[], ignore_H=False):
 # =========================================================
 
 
-def find_bonds_in_rings_alg1(mol, ring_defs, intruding_res, resname_bonds_map):
+def find_bonds_in_rings_alg1(mol, ring_defs, intruding_res, resname_bonds_map,
+                             proximity_cutoff):
     """ Tries to find bonds inside rings using simple geometric distance.
 
     Arguments:
@@ -290,13 +296,13 @@ def find_bonds_in_rings_alg1(mol, ring_defs, intruding_res, resname_bonds_map):
         intruding_res: list, list of residue names that are checked
             like ['POPC',...]
         resname_bonds_map: dict, output from guess_intra_res_bonds()
+        proximity_cutoff: float, the cutoff between the center of the ring and
+            the center of a bond for being reported.
 
     Returns:
         result: dict, {'res1-res2':[dist1, dist2,...], ....}
 
     """
-
-    print('(i) finding bonds in rings...')
 
     # find the index of residues that have rings
     ring_resnames = list(ring_defs.keys())
@@ -334,18 +340,56 @@ def find_bonds_in_rings_alg1(mol, ring_defs, intruding_res, resname_bonds_map):
                         mol.residues[j].get_atom_coords_basedon_names(*b)
                     bond_crds_mean = np.array(bond_crds).mean(axis=0)
                     dist = coord_dist(ring_crds_mean, bond_crds_mean)
-                    if dist <= 2.5:
+                    if dist <= 2.3:
                         key = '%s - %s' % (mol.residues[i], mol.residues[j])
                         result[key].append(dist)
 
-    # show the result - ascending based on the distance
-    result_sum = {k: min(result[k]) for k in list(result.keys())}
-    result_keys = sorted(result_sum, key=result_sum.get)
-    for k in result_keys:
-        print('\t %s    -> %4.2f A' % (k, result_sum[k]))
-
     return result
 
+# =========================================================
+# Make VMD script
+# =========================================================
+
+
+def make_vmd_script(fname, result_sum):
+    """ Create a vmdscript for visualizing the result
+
+    Arguments:
+        fname: string, the name of PDB file
+        result_sum: dict: {'resname1 resid1 - resname2 resid2':dist, ...}
+
+    """
+
+    VMD_TEMPLATE = """
+mol load pdb {FNAME}
+mol delrep 0 top
+
+{REP_COMMANDS}
+    """
+
+    script = VMD_TEMPLATE.replace('{FNAME}', fname)
+    rep_commands = []
+
+    rep_number = 0
+    for k in list(result_sum.keys()):
+        res1 = k.split('-')[0].strip()
+        res2 = k.split('-')[1].strip()
+        resname1, resid1 = res1.split()
+        resname2, resid2 = res2.split()
+
+        sel = '(resname %s and resid %s) or (resname %s and resid %s)' % (
+            resname1, resid1, resname2, resid2)
+        cm = 'mol addrep top\n'
+        cm += 'mol modselect %d top "noh and (%s)"\n' % (rep_number, sel)
+
+        rep_commands.append(cm)
+        rep_number += 1
+
+    script = script.replace('{REP_COMMANDS}', '\n'.join(rep_commands))
+
+    outname = fname + '_vmd'
+    with open(outname, 'w') as f:
+        f.writelines(script)
 
 # =========================================================
 # Main
@@ -362,12 +406,15 @@ def main():
     p.add_argument('--cut', dest='bond_cutoff', default=1.6,
                    help='cutoff for defining bonds')
 
+    p.add_argument('--prox', dest='proximity_cutoff', default=2.3,
+                   help='proximity cutoff for finding bonds in rings')
+
     p.add_argument('-H', dest='include_H', default=False, action='store_true',
                    help='include hydrogens for checking bonds')
 
     p.add_argument('-I', dest='ignored_res', nargs='?', const=[],
-                   default=['TIP3', 'TIP3P', 'SOD', 'CLA'],
-                   help='ignore these residues')
+                   default=['TIP3', 'TIP3P', 'SOD', 'CLA', 'HOH'],
+                   help='ignore these residues to read the file faster')
 
     p.add_argument('-A', dest='intruding_res', nargs='?', const=[],
                    default=['POPC', 'DOPC'],
@@ -377,19 +424,20 @@ def main():
     # Namespace(bond_cutoff=2.8, include_H=False, pdb='step5_assembly.pdb')
     args = p.parse_args()
 
+    # ---------------------------------
+    # inform about flags
+    print('(i) include hydrogens:', args.include_H)
+    print('(i) cutoff for defining bonds: %4.2f A' % args.bond_cutoff)
+    print('(i) proximity cutoff for reporting bonds in rings: %4.2f A' %
+          args.proximity_cutoff)
+    print('(i) ignoring these residues: %s' % args.ignored_res)
+    print('(i) checking inruding residues: %s' % args.intruding_res)
+
+    # ---------------------------------
     # check for the file
     if not os.path.exists(args.pdb):
         print('(e) the file "%s" doesn\'t exist' % args.pdb)
         return
-
-    # inform about flags
-    if args.include_H is False:
-        print('(i) ignoring hydrogens.')
-
-    if args.ignored_res:
-        print('(i) ignoring these residues: %s.' % args.ignored_res)
-
-    # ---------------------------------
     # read the molecule
     mol = read_pdb(args.pdb, args.ignored_res, not args.include_H)
     print(mol)
@@ -410,8 +458,22 @@ def main():
 
     # ---------------------------------
     # find suspicious residues using algorithm 1
-    find_bonds_in_rings_alg1(mol,
-                             ring_defs, args.intruding_res, resname_bonds_map)
+    print('(i) finding bonds in rings...')
+    result = find_bonds_in_rings_alg1(mol,
+                                      ring_defs,
+                                      args.intruding_res,
+                                      resname_bonds_map,
+                                      args.proximity_cutoff)
+
+    # show the result - ascending based on the distance
+    print('(i) these residues potentially have bond-in-ring situation:\n')
+    result_sum = {k: min(result[k]) for k in list(result.keys())}
+    result_keys = sorted(result_sum, key=result_sum.get)
+    for k in result_keys:
+        print('\t %s    -> %4.2f A' % (k, result_sum[k]))
+
+    # make vmd script
+    make_vmd_script(args.pdb, result_sum)
 
     # ---------------------------------
     print('(i) done.')
