@@ -39,3 +39,4 @@ And it will output the residues that it thinks might have bond-in-ring issue.
 	# or if you have coverage installed:
 	python -m coverage run test_biring.py
 	python -m coverage report
+	python -m coverage html
