@@ -1,2 +1,4 @@
-*.pdb
 *.tga
+*_vmd
+*.pyc
+
