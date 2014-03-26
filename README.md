@@ -31,6 +31,43 @@ Use `-h` for all options. Typically you can run:
 
 And it will output the residues that it thinks might have bond-in-ring issue.
 
+Sample output:
+
+	$ python3.4 biring.py sample/pdb1.pdb
+
+	(i) include hydrogens: False
+	(i) cutoff for defining bonds: 1.60 A
+	(i) proximity cutoff for reporting bonds in rings: 2.30 A
+	(i) ignoring these residues: ['TIP3', 'TIP3P', 'SOD', 'CLA', 'HOH']
+	(i) checking inruding residues: ['POPC', 'DOPC']
+	(i) molecule with 1919 residues and 23471 atoms.
+	(i) number of found bonds based on 1.60 A cutoff:
+	           POPC : 49 bonds
+	(i) parsed 9 rings belonging to 5 residues.
+	(i) finding bonds in rings...
+	(i) these residues potentially have bond-in-ring situation:
+
+          PHE  328 [1007] - POPC   40 [1738]    -> 1.14 A
+         CHL1   17 [1715] - POPC   35 [1733]    -> 1.30 A
+         CHL1    1 [1699] - POPC   62 [1760]    -> 1.36 A
+         CHL1   29 [1727] - POPC   39 [1737]    -> 1.36 A
+          TRP  308 [ 987] - POPC  148 [1846]    -> 1.64 A
+         CHL1  122 [1820] - POPC  137 [1835]    -> 1.80 A
+          PHE  327 [ 326] - POPC   45 [1743]    -> 1.85 A
+         CHL1   24 [1722] - POPC   91 [1789]    -> 1.92 A
+         CHL1  108 [1806] - POPC  216 [1914]    -> 2.07 A
+         CHL1   26 [1724] - POPC   79 [1777]    -> 2.17 A
+         CHL1   28 [1726] - POPC   88 [1786]    -> 2.25 A
+         CHL1  123 [1821] - POPC  149 [1847]    -> 2.30 A
+
+	(i) the vmd script is created - to visulize the reported residues:
+
+	         vmd -e sample/pdb1.pdb_vmd
+
+	    note that the representations are hidden by default.
+	    go to Graphics->Representions to enable them.
+
+	(i) done.
 
 ## To run tests
 
