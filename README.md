@@ -77,7 +77,7 @@ Sample output:
 	(i) done.
 
 Note that the results need visual inspection, as the current algorithm is simple
-and a bit paranoid. In the case of the sample above, only two set of residues
+and a bit paranoid. In the case of the sample above, only two sets of residues
 (PHE 328 - POPC 40) and (CHL1 122 - POPC 137) indeed have bonds crossing the
 rings.
 
