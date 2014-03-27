@@ -1,5 +1,7 @@
 
-Reza Salari ([Brannigan Lab](http://branniganlab.org))
+# Biring
+
+Reza Salari - [Brannigan Lab](http://branniganlab.org)
 
 
 ## Introduction
@@ -13,6 +15,11 @@ Currently, one simple algorithm is implemented - if the distance between the
 center of a bond from the center of a ring is less than the `PROXIMITY_CUTOFF`,
 it will be reported. The script also creates a vmd script that help visualizing
 the reported residues.
+
+To make the script flexible and simple, it only needs a PDB file and doesn't
+rely on the topology files (like PSF or TOP). On the flip side, it uses the
+cutoff method to find the atoms that form bonds. The current `BOND_CUTOFF` is
+1.6 A (a bit longer than the length of C-C bond).
 
 ## Requirements
 
