@@ -328,7 +328,7 @@ def find_bonds_in_rings_alg1(mol, ring_defs, intruding_res, resname_bonds_map,
 # =========================================================
 
 
-def make_vmd_script(fname, result_res_objects):
+def make_vmd_script(fname, result_res_objects, vmd_script_name):
     """ Create a vmdscript for visualizing the result
 
     Arguments:
@@ -363,11 +363,12 @@ mol delrep 0 top
 
     script = script.replace('{REP_COMMANDS}', '\n'.join(rep_commands))
 
-    outname = fname + '_vmd'
-    with open(outname, 'w') as f:
+    if vmd_script_name is None:
+        vmd_script_name = fname + '_vmd'
+    with open(vmd_script_name, 'w') as f:
         f.writelines(script)
 
-    return outname
+    return vmd_script_name
 
 # =========================================================
 # Main
@@ -397,6 +398,9 @@ def main():
     p.add_argument('-A', dest='intruding_res', nargs='?', const=[],
                    default=['POPC', 'DOPC'],
                    help='residues that can pass through a ring')
+
+    p.add_argument('--vmd', dest='vmd_script_name', default=None,
+                   help='the name of vmd script.')
 
     # args:
     # Namespace(bond_cutoff=2.8, include_H=False, pdb='step5_assembly.pdb')
@@ -454,7 +458,8 @@ def main():
 
     # ---------------------------------
     # make vmd script
-    outname = make_vmd_script(args.pdb, result_res_objects)
+    outname = make_vmd_script(args.pdb, result_res_objects,
+                              args.vmd_script_name)
     print('(i) the vmd script is created - to visulize the reported residues:')
     print('\n         vmd -e %s\n' % outname)
     print('    note that the representations are hidden by default.')

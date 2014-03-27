@@ -1,5 +1,5 @@
 *.tga
-*_vmd
+*vmd
 *.pyc
 __pycache__
 .coverage
