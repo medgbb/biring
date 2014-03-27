@@ -84,3 +84,7 @@ Sample output:
 	python -m coverage run test_biring.py
 	python -m coverage report
 	python -m coverage html
+
+## Questions?
+
+Please use the [issues](https://github.com/resal81/biring/issues) page.
